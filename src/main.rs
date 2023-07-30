@@ -1,6 +1,11 @@
 use colored::*;
+use fs_extra::dir::{self, CopyOptions};
 use inquire::{error::InquireResult, required, validator::Validation, Confirm, Select, Text};
+use project_root::get_project_root;
+use serde_json::Value;
+use std::process::{exit, Command, Stdio};
 use std::time::Instant;
+use std::{fs, path::Path};
 
 struct ProjectTemplate {
     module: String,
@@ -139,7 +144,11 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
 
     let pkgmgr = Select::new(
         "What package manager would you like to use?",
-        vec!["NPM (Node Package Manager)", "Yarn"],
+        vec![
+            "NPM (Node Package Manager)",
+            "Yarn",
+            "PNPM (Performant NPM)",
+        ],
     )
     .prompt()?;
 
@@ -214,6 +223,80 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
     }
 }
 
+fn update_package_json(project_path: &Path, template: &ProjectTemplate) {
+    let json_path = project_path.join(Path::new("package.json"));
+    let json_data = fs::read_to_string(&json_path).expect("Err: Failed to read the JSON file");
+    let mut package: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+    let package_obj = package.as_object_mut().expect("Expected a JSON object");
+
+    package_obj.insert("name".to_string(), Value::String(template.name.clone()));
+    package_obj.insert("author".to_string(), Value::String(template.author.clone()));
+    package_obj.insert(
+        "license".to_string(),
+        Value::String(template.license.clone()),
+    );
+
+    let json_data_new = serde_json::to_string_pretty(&package).expect("Failed to serialize JSON");
+    fs::write(json_path, json_data_new).expect("Failed to write JSON to the file");
+}
+
+fn init_git(path: &Path) {
+    println!("\n\n{}", "Intitializing git repository =>".blue());
+    let commit_message = "🎉 Initialized project using Springboard";
+    let command_set = format!(
+        "git init && git checkout -b main && git add -A && git commit -m {}",
+        commit_message
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(command_set)
+        .current_dir(path)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .expect("Err: Failed to init a git repository");
+}
+
+fn install_deps(path: &Path, pkgmgr: &str) {
+    println!("\n\n{}", "Installing dependencies =>".blue());
+    match pkgmgr {
+        "NPM (Node Package Manager)" => {
+            Command::new("npm")
+                .arg("i")
+                .current_dir(path)
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+                .expect("Err: Failed to run npm i");
+        }
+
+        "Yarn" => {
+            Command::new("yarn")
+                .current_dir(path)
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+                .expect("Err: Failed to run yarn");
+        }
+
+        "PNPM (Performant NPM)" => {
+            Command::new("pnpm")
+                .arg("i")
+                .current_dir(path)
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+                .expect("Err: Failed to run pnpm i");
+        }
+        _ => {}
+    }
+}
+
 fn main() {
     let start = Instant::now();
 
@@ -231,13 +314,53 @@ fn main() {
 
     let template = get_project_template().unwrap();
     template.print_template();
+
     let template_string = template.gen_template_string();
 
-    println!("\n{}: {}", "Template".blue(), template_string.green());
+    let springboard_root = match get_project_root() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} Can't obtain project root {:?}", "Err:".red(), e);
+            exit(1);
+        }
+    };
+
+    let template_path = springboard_root.join(Path::new("src/templates/").join(template_string));
+    let project_path = springboard_root.join(&template.name);
+
+    if project_path.exists() {
+        eprintln!(
+            "{} Destination folder with project name already exist",
+            "Err:".red()
+        );
+        exit(1);
+    }
+
+    if let Err(e) = dir::copy(
+        template_path,
+        &project_path,
+        &CopyOptions {
+            copy_inside: true,
+            ..Default::default()
+        },
+    ) {
+        eprintln!("{} {}", "Err:".red(), e);
+        exit(1);
+    }
+
+    update_package_json(&project_path, &template);
+    init_git(&project_path);
+    install_deps(&project_path, template.pkgmgr.as_str());
+
+    println!(
+        "{} {}",
+        "\n\nProject sucessfully bootstrapped at:".blue(),
+        project_path.display().to_string().green()
+    );
 
     let duration = start.elapsed().as_secs_f64();
     println!(
-        "\nSprung in {} seconds 🚀",
+        "Sprung in {} seconds 🚀",
         format!("{:.2}", duration).green()
     );
 }
