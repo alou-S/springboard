@@ -2,21 +2,114 @@ use colored::*;
 use inquire::{error::InquireResult, required, validator::Validation, Confirm, Select, Text};
 use std::time::Instant;
 
-fn main() -> InquireResult<()> {
-    let start = Instant::now();
+struct ProjectTemplate {
+    module: String,
+    name: String,
+    author: String,
+    license: String,
+    pkgmgr: String,
+    typescript: bool,
+    express: Option<bool>,
+    stylings: Option<String>,
+}
 
-    println!("{}", "+-+-+-+-+-+-+-+-+-+-+-+".green());
-    println!("{}", "|S|p|r|i|n|g|b|o|a|r|d|".green());
-    println!("{}", "+-+-+-+-+-+-+-+-+-+-+-+".green());
-    println!(
-        "{}",
-        "Springboard jumpstarts your projects for you.".green()
-    );
-    println!(
-        "{}",
-        "\nCrafted with ❤ in Rust 🦀\n\n".truecolor(255, 128, 0)
-    );
+impl ProjectTemplate {
+    fn print_template(&self) {
+        println!(
+            "{}",
+            "\n\nProject initialized with the following configuration =>".green()
+        );
+        println!(
+            "{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}",
+            "Module".blue(),
+            self.module,
+            "Name".blue(),
+            self.name,
+            "Author".blue(),
+            self.author,
+            "License".blue(),
+            self.license,
+            "PkgMgr".blue(),
+            self.pkgmgr,
+            "TypeScript".blue(),
+            self.typescript
+        );
 
+        if let Some(value) = self.express {
+            println!("{}: {}", "Express".blue(), value);
+        }
+
+        if let Some(value) = &self.stylings {
+            println!("{}: {}", "Styling".blue(), value);
+        }
+    }
+
+    fn gen_template_string(&self) -> String {
+        let mut result = String::new();
+
+        match self.module.as_str() {
+            "Server" => {
+                result.push_str("server");
+
+                if let Some(true) = self.express {
+                    result.push_str("-express");
+                }
+
+                match self.typescript {
+                    true => result.push_str("-ts"),
+                    false => result.push_str("-js"),
+                }
+            }
+
+            "Client" => {
+                result.push_str("client");
+
+                if let Some(styling) = &self.stylings {
+                    match styling.as_str() {
+                        "CSS" => result.push_str("-css"),
+                        "SCSS" => result.push_str("-scss"),
+                        "Bootstrap" => result.push_str("-bootstrap"),
+                        "Styled Components" => result.push_str("-styled-components"),
+                        "Tailwind CSS" => result.push_str("-tailwind"),
+                        _ => {}
+                    }
+                }
+
+                match self.typescript {
+                    true => result.push_str("-ts"),
+                    false => result.push_str("-js"),
+                }
+            }
+            _ => {
+                result.push_str("full-stack");
+
+                if let Some(styling) = &self.stylings {
+                    match styling.as_str() {
+                        "CSS" => result.push_str("-css"),
+                        "SCSS" => result.push_str("-scss"),
+                        "Bootstrap" => result.push_str("-bootstrap"),
+                        "Styled Components" => result.push_str("-styled-components"),
+                        "Tailwind CSS" => result.push_str("-tailwind"),
+                        _ => {}
+                    }
+                }
+
+                if let Some(true) = self.express {
+                    result.push_str("-express");
+                }
+
+                match self.typescript {
+                    true => result.push_str("-ts"),
+                    false => result.push_str("-js"),
+                }
+            }
+        }
+
+        result
+    }
+}
+
+fn get_project_template() -> InquireResult<ProjectTemplate> {
     // Validator for name input
     let validator = |input: &str| {
         if input.chars().all(|c| c.is_ascii_alphanumeric()) {
@@ -50,28 +143,23 @@ fn main() -> InquireResult<()> {
     )
     .prompt()?;
 
-    let tscript = Confirm::new("Would you like to add TypeScript to your project?").prompt()?;
+    let typescript = Confirm::new("Would you like to add TypeScript to your project?").prompt()?;
 
     match module {
         "Server" => {
-            let initserver =
-                Confirm::new("Would you like to initialize a basic server?").prompt()?;
-
-            println!(
-                "{}",
-                "\n\nProject initialized with the following configuration =>".green()
-            );
-            println!(
-                "{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {}",
-                "Module".blue(), module,
-                "Name".blue(), name,
-                "Author".blue(), author,
-                "License".blue(), license,
-                "PkgMgr".blue(),pkgmgr,
-                "TypeScript".blue(), tscript,
-                "Server".blue(), initserver
-            );
+            let express = Confirm::new("Would you like to initialize a basic server?").prompt()?;
+            Ok(ProjectTemplate {
+                module: module.to_owned(),
+                name,
+                author,
+                license,
+                pkgmgr: pkgmgr.to_owned(),
+                typescript,
+                express: Some(express),
+                stylings: None,
+            })
         }
+
         "Client" => {
             let stylings = Select::new(
                 "What stylings would you like to add?",
@@ -85,24 +173,20 @@ fn main() -> InquireResult<()> {
             )
             .prompt()?;
 
-            println!(
-                "{}",
-                "\n\nProject initialized with the following configuration =>".green()
-            );
-            println!(
-                "{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {}",
-                "Module".blue(), module,
-                "Name".blue(), name,
-                "Author".blue(), author,
-                "License".blue(), license,
-                "PkgMgr".blue(), pkgmgr,
-                "TypeScript".blue(), tscript,
-                "Stylings".blue(), stylings
-            );
+            Ok(ProjectTemplate {
+                module: module.to_owned(),
+                name,
+                author,
+                license,
+                pkgmgr: pkgmgr.to_owned(),
+                typescript,
+                express: None,
+                stylings: Some(stylings.to_owned()),
+            })
         }
+
         _ => {
-            let initserver =
-                Confirm::new("Would you like to initialize a basic server?").prompt()?;
+            let express = Confirm::new("Would you like to initialize a basic server?").prompt()?;
 
             let stylings = Select::new(
                 "What stylings would you like to add?",
@@ -116,29 +200,44 @@ fn main() -> InquireResult<()> {
             )
             .prompt()?;
 
-            println!(
-                "{}",
-                "\n\nProject initialized with the following configuration =>".green()
-            );
-            println!(
-                "{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {} \n{}: {}",
-                "Module".blue(), module,
-                "Name".blue(), name,
-                "Author".blue(), author,
-                "License".blue(), license,
-                "PkgMgr".blue(), pkgmgr,
-                "TypeScript".blue(), tscript,
-                "Server".blue(), initserver,
-                "Stylings".blue(), stylings
-            );
+            Ok(ProjectTemplate {
+                module: module.to_owned(),
+                name,
+                author,
+                license,
+                pkgmgr: pkgmgr.to_owned(),
+                typescript,
+                express: Some(express),
+                stylings: Some(stylings.to_owned()),
+            })
         }
     }
+}
+
+fn main() {
+    let start = Instant::now();
+
+    println!("{}", "+-+-+-+-+-+-+-+-+-+-+-+".green());
+    println!("{}", "|S|p|r|i|n|g|b|o|a|r|d|".green());
+    println!("{}", "+-+-+-+-+-+-+-+-+-+-+-+".green());
+    println!(
+        "{}",
+        "Springboard jumpstarts your projects for you.".green()
+    );
+    println!(
+        "{}",
+        "\nCrafted with ❤ in Rust 🦀\n\n".truecolor(255, 128, 0)
+    );
+
+    let template = get_project_template().unwrap();
+    template.print_template();
+    let template_string = template.gen_template_string();
+
+    println!("\n{}: {}", "Template".blue(), template_string.green());
 
     let duration = start.elapsed().as_secs_f64();
     println!(
         "\nSprung in {} seconds 🚀",
         format!("{:.2}", duration).green()
     );
-
-    Ok(())
 }
