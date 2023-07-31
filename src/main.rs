@@ -117,7 +117,10 @@ impl ProjectTemplate {
 fn get_project_template() -> InquireResult<ProjectTemplate> {
     // Validator for name input
     let validator = |input: &str| {
-        if input.chars().all(|c| c.is_ascii_alphanumeric()) {
+        if input
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+        {
             Ok(Validation::Valid)
         } else {
             Ok(Validation::Invalid("Name should be alphanumeric.".into()))
