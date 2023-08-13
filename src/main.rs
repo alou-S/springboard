@@ -1,6 +1,8 @@
+mod licenses;
 use colored::*;
 use fs_extra::dir::{self, CopyOptions};
 use inquire::{error::InquireResult, required, validator::Validation, Confirm, Select, Text};
+use licenses::{COMMON_LICENSES, LICENSES};
 use project_root::get_project_root;
 use serde_json::Value;
 use std::process::{exit, Command, Stdio};
@@ -11,7 +13,8 @@ struct ProjectTemplate {
     module: String,
     name: String,
     author: String,
-    license: String,
+    license_name: String,
+    license_keyword: String,
     pkgmgr: String,
     typescript: bool,
     express: Option<bool>,
@@ -19,13 +22,13 @@ struct ProjectTemplate {
 }
 
 impl ProjectTemplate {
-    fn print_template(&self) {
+    fn print_template(&self) -> bool {
         println!(
             "{}",
-            "\n\nProject initialized with the following configuration =>".green()
+            "\n\nProject will be initialized with the following configuration =>".green()
         );
         println!(
-            "{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}",
+            "{}: {}\n{}: {}\n{}: {}\n{}: {} ({})\n{}: {}\n{}: {}",
             "Module".blue(),
             self.module,
             "Name".blue(),
@@ -33,7 +36,8 @@ impl ProjectTemplate {
             "Author".blue(),
             self.author,
             "License".blue(),
-            self.license,
+            self.license_name,
+            self.license_keyword,
             "PkgMgr".blue(),
             self.pkgmgr,
             "TypeScript".blue(),
@@ -47,6 +51,10 @@ impl ProjectTemplate {
         if let Some(value) = &self.stylings {
             println!("{}: {}", "Styling".blue(), value);
         }
+
+        return Confirm::new("Do you want to continue with this template?")
+            .prompt()
+            .unwrap()
     }
 
     fn gen_template_string(&self) -> String {
@@ -131,7 +139,9 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
         "What modules would you like to add?",
         vec!["Server", "Client", "Full stack"],
     )
-    .prompt()?;
+    .prompt()
+    .unwrap()
+    .to_string();
 
     let name = Text::new("What's the name of your project?")
         .with_validator(required!("This field is required"))
@@ -143,7 +153,60 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
         .with_validator(validator)
         .prompt()?;
 
-    let license = Text::new("What's the license for your project?").prompt()?;
+    let common_licenses = COMMON_LICENSES
+        .iter()
+        .map(|(name, keyword)| format!("{} ({})", name, keyword))
+        .collect::<Vec<String>>();
+
+    let all_licenses = LICENSES
+        .iter()
+        .map(|(name, keyword)| format!("{} ({})", name, keyword))
+        .collect::<Vec<String>>();
+
+    let (license_name, license_keyword) = match Select::new(
+        &"Which license would you select for your project",
+        vec!["Common Licenses", "All Licenses", "Custom License"],
+    )
+    .prompt()?
+    {
+        "Common Licenses" => {
+            let selection = Select::new("Choose a license", common_licenses)
+                .prompt()
+                .unwrap();
+            let split_index = selection.find('(').unwrap();
+            (
+                selection[..split_index].trim().to_string(),
+                selection[split_index + 1..selection.len() - 1]
+                    .trim()
+                    .to_string(),
+            )
+        }
+
+        "All Licenses" => {
+            let selection = Select::new("Choose a license", all_licenses).prompt()?;
+            let split_index = selection.find('(').unwrap();
+            (
+                selection[..split_index].trim().to_string(),
+                selection[split_index + 1..selection.len() - 1]
+                    .trim()
+                    .to_string(),
+            )
+        }
+
+        _ => (
+            Text::new("License Name:")
+                .with_validator(required!("This field is required"))
+                .prompt()
+                .unwrap()
+                .to_string(),
+            Text::new("License Keyword:")
+                .with_validator(required!("This field is required"))
+                .with_validator(validator)
+                .prompt()
+                .unwrap()
+                .to_string(),
+        ),
+    };
 
     let pkgmgr = Select::new(
         "What package manager would you like to use?",
@@ -153,19 +216,22 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
             "PNPM (Performant NPM)",
         ],
     )
-    .prompt()?;
+    .prompt()
+    .unwrap()
+    .to_string();
 
     let typescript = Confirm::new("Would you like to add TypeScript to your project?").prompt()?;
 
-    match module {
+    match module.as_str() {
         "Server" => {
             let express = Confirm::new("Would you like to initialize a basic server?").prompt()?;
             Ok(ProjectTemplate {
-                module: module.to_owned(),
+                module,
                 name,
                 author,
-                license,
-                pkgmgr: pkgmgr.to_owned(),
+                license_name,
+                license_keyword,
+                pkgmgr,
                 typescript,
                 express: Some(express),
                 stylings: None,
@@ -183,17 +249,20 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
                     "Tailwind CSS",
                 ],
             )
-            .prompt()?;
+            .prompt()
+            .unwrap()
+            .to_string();
 
             Ok(ProjectTemplate {
-                module: module.to_owned(),
+                module,
                 name,
                 author,
-                license,
-                pkgmgr: pkgmgr.to_owned(),
+                license_name,
+                license_keyword,
+                pkgmgr,
                 typescript,
                 express: None,
-                stylings: Some(stylings.to_owned()),
+                stylings: Some(stylings),
             })
         }
 
@@ -210,17 +279,20 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
                     "Tailwind CSS",
                 ],
             )
-            .prompt()?;
+            .prompt()
+            .unwrap()
+            .to_string();
 
             Ok(ProjectTemplate {
-                module: module.to_owned(),
+                module,
                 name,
                 author,
-                license,
-                pkgmgr: pkgmgr.to_owned(),
+                license_name,
+                license_keyword,
+                pkgmgr,
                 typescript,
                 express: Some(express),
-                stylings: Some(stylings.to_owned()),
+                stylings: Some(stylings),
             })
         }
     }
@@ -236,7 +308,7 @@ fn update_package_json(project_path: &Path, template: &ProjectTemplate) {
     package_obj.insert("author".to_string(), Value::String(template.author.clone()));
     package_obj.insert(
         "license".to_string(),
-        Value::String(template.license.clone()),
+        Value::String(template.license_keyword.clone()),
     );
 
     let json_data_new = serde_json::to_string_pretty(&package).expect("Failed to serialize JSON");
@@ -247,7 +319,7 @@ fn init_git(path: &Path) {
     println!("\n\n{}", "Intitializing git repository =>".blue());
     let commit_message = "🎉 Initialized project using Springboard";
     let command_set = format!(
-        "git init && git checkout -b main && git add -A && git commit -m {}",
+        "git init -q && git checkout -b main && git add -A && git commit -m \"{}\"",
         commit_message
     );
 
@@ -315,8 +387,14 @@ fn main() {
         "\nCrafted with ❤ in Rust 🦀\n\n".truecolor(255, 128, 0)
     );
 
-    let template = get_project_template().unwrap();
-    template.print_template();
+    let mut template;
+
+    loop {
+        template = get_project_template().unwrap();
+        if template.print_template() {
+            break;
+        }
+    }
 
     let template_string = template.gen_template_string();
 
@@ -354,6 +432,20 @@ fn main() {
     update_package_json(&project_path, &template);
     init_git(&project_path);
     install_deps(&project_path, template.pkgmgr.as_str());
+
+    if LICENSES
+        .iter()
+        .any(|license| license.1 == template.license_keyword)
+    {
+        fs::copy(
+            springboard_root.join(format!(
+                "src/license-templates/{}",
+                template.license_keyword
+            )),
+            project_path.join("LICENSE"),
+        )
+        .unwrap();
+    }
 
     println!(
         "{} {}",
