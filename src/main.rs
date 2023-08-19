@@ -1,14 +1,20 @@
 mod licenses;
+use licenses::{COMMON_LICENSES, LICENSES};
+
+use inquire::error::InquireResult;
+use inquire::validator::Validation;
+use inquire::{required, Confirm, Select, Text};
+
 use colored::*;
 use fs_extra::dir::{self, CopyOptions};
-use inquire::{error::InquireResult, required, validator::Validation, Confirm, Select, Text};
-use licenses::{COMMON_LICENSES, LICENSES};
 use project_root::get_project_root;
 use serde_json::Value;
+
 use std::process::{exit, Command, Stdio};
 use std::time::Instant;
 use std::{fs, path::Path};
 
+// Main structure that holds the project template
 struct ProjectTemplate {
     module: String,
     name: String,
@@ -21,7 +27,9 @@ struct ProjectTemplate {
     stylings: Option<String>,
 }
 
+// Implementation that holds the required functions related to project template
 impl ProjectTemplate {
+    // Neatly prints out template details
     fn print_template(&self) -> bool {
         println!(
             "{}",
@@ -52,11 +60,12 @@ impl ProjectTemplate {
             println!("{}: {}", "Styling".blue(), value);
         }
 
-        return Confirm::new("Do you want to continue with this template?")
+        Confirm::new("Do you want to continue with this template?")
             .prompt()
             .unwrap()
     }
 
+    // Generates the string required for fetch template folder name
     fn gen_template_string(&self) -> String {
         let mut result = String::new();
 
@@ -122,6 +131,7 @@ impl ProjectTemplate {
     }
 }
 
+// Fetch license template from user using inquire
 fn get_project_template() -> InquireResult<ProjectTemplate> {
     // Validator for name input
     let validator = |input: &str| {
@@ -298,8 +308,9 @@ fn get_project_template() -> InquireResult<ProjectTemplate> {
     }
 }
 
+// Updates the package.json file with name, author and license
 fn update_package_json(project_path: &Path, template: &ProjectTemplate) {
-    let json_path = project_path.join(Path::new("package.json"));
+    let json_path = project_path.join("package.json");
     let json_data = fs::read_to_string(&json_path).expect("Err: Failed to read the JSON file");
     let mut package: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
     let package_obj = package.as_object_mut().expect("Expected a JSON object");
@@ -315,6 +326,7 @@ fn update_package_json(project_path: &Path, template: &ProjectTemplate) {
     fs::write(json_path, json_data_new).expect("Failed to write JSON to the file");
 }
 
+// Initializes the git repo
 fn init_git(path: &Path) {
     println!("\n\n{}", "Intitializing git repository =>".blue());
     let commit_message = "🎉 Initialized project using Springboard";
@@ -334,6 +346,7 @@ fn init_git(path: &Path) {
         .expect("Err: Failed to init a git repository");
 }
 
+// Installs node dependencies using the specified package manager
 fn install_deps(path: &Path, pkgmgr: &str) {
     println!("\n\n{}", "Installing dependencies =>".blue());
     match pkgmgr {
@@ -373,6 +386,7 @@ fn install_deps(path: &Path, pkgmgr: &str) {
 }
 
 fn main() {
+    // Stores the "Instant" the program starts
     let start = Instant::now();
 
     println!("{}", "+-+-+-+-+-+-+-+-+-+-+-+".green());
@@ -389,7 +403,16 @@ fn main() {
 
     let mut template;
 
+    // Loop is for making sure return is true before continuing
     loop {
+        if cfg!(target_os = "windows") {
+            Command::new("cls").status().expect("Failed to clear");
+        } else {
+            Command::new("clear")
+                .status()
+                .expect("Failed to clear screen");
+        }
+
         template = get_project_template().unwrap();
         if template.print_template() {
             break;
@@ -406,7 +429,9 @@ fn main() {
         }
     };
 
-    let template_path = springboard_root.join(Path::new("src/templates/").join(template_string));
+    let template_path = springboard_root
+        .join("src/templates/")
+        .join(template_string);
     let project_path = springboard_root.join(&template.name);
 
     if project_path.exists() {
@@ -433,15 +458,15 @@ fn main() {
     init_git(&project_path);
     install_deps(&project_path, template.pkgmgr.as_str());
 
+    // Check if license is a "Custom License"
     if LICENSES
         .iter()
         .any(|license| license.1 == template.license_keyword)
     {
         fs::copy(
-            springboard_root.join(format!(
-                "src/license-templates/{}",
-                template.license_keyword
-            )),
+            springboard_root
+                .join("src/license-templates/")
+                .join(template.license_keyword),
             project_path.join("LICENSE"),
         )
         .unwrap();
